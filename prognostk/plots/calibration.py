@@ -11,8 +11,8 @@ import matplotlib.pyplot as plt
 
 from ..config import Config
 from ..metrics.calibration import calibration_table
-from ..metrics.survival import (CoxModel, _as_model, assign_risk_groups,
-                                predict_survival_at_time)
+from ..metrics.survival import (CoxModel, _as_model, _survival_frame,
+                                assign_risk_groups, predict_survival_at_time)
 from ..utils.theme import apply_base_style, prognostk_palette, save_figure
 
 
@@ -62,7 +62,7 @@ def plot_individual_curves(fit: CoxModel, data: pd.DataFrame, cfg: Config,
     labels = list(pd.Categorical(risk_groups).categories)
     palette = prognostk_palette(cfg, "risk", labels)
 
-    sf = model.fitter.predict_survival_function(data, times=grid)  # times x subjects
+    sf = _survival_frame(model.fitter, data, grid)  # times x subjects, row order
     fig, ax = plt.subplots(constrained_layout=True)
     rg = np.asarray(risk_groups)
     for j in range(sf.shape[1]):

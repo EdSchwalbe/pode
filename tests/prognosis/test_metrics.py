@@ -22,6 +22,29 @@ def test_stratified_predict():
     assert np.all(np.isfinite(ps))
 
 
+def test_stratified_predict_keeps_row_order():
+    # lifelines groups stratified predictions by stratum; each patient must still
+    # get their own prediction. Within a stratum survival is then a monotone
+    # function of the score (protective here, so rank correlation is +1).
+    cfg = toy_cfg(); d = make_toy()
+    fit = pk.fit_cox(d, cfg, covariates=["metaCpG", "strata:grp"])
+    ps = pk.predict_survival_at_time(fit, d, cfg=cfg)
+    for _, g in d.assign(ps=ps).groupby("grp"):
+        assert g["metaCpG"].corr(g["ps"], method="spearman") > 0.999
+
+
+def test_stratified_predict_matches_single_rows():
+    # Predicting the cohort at once must equal predicting each patient alone,
+    # including with a shuffled, non-default index.
+    cfg = toy_cfg(); d = make_toy()
+    fit = pk.fit_cox(d, cfg, covariates=["metaCpG", "strata:grp"])
+    shuffled = d.sample(frac=1, random_state=3).set_index(np.arange(len(d)) + 500)
+    ps = pk.predict_survival_at_time(fit, shuffled, cfg=cfg)
+    one_by_one = [pk.predict_survival_at_time(fit, shuffled.iloc[[i]], cfg=cfg)[0]
+                  for i in range(len(shuffled))]
+    assert np.allclose(ps, one_by_one)
+
+
 def test_assign_risk_groups_order():
     cfg = toy_cfg()
     g = pk.assign_risk_groups([0.95, 0.8, 0.6, 0.3], cfg)

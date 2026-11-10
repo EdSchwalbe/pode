@@ -87,14 +87,28 @@ def _as_model(fit) -> CoxModel:
     raise TypeError("Expected a CoxModel from fit_cox().")
 
 
+def _survival_frame(fitter: CoxPHFitter, newdata: pd.DataFrame, times) -> pd.DataFrame:
+    """``fitter.predict_survival_function`` with columns in ``newdata`` row order.
+
+    For a stratified model lifelines returns the subjects grouped by stratum, not
+    in input order, so taking ``.to_numpy()`` directly hands each patient another
+    patient's prediction. Predict on a positional index and reorder by it (this
+    also copes with duplicate or non-default index labels).
+    """
+    positional = newdata.reset_index(drop=True)
+    sf = fitter.predict_survival_function(positional, times=times)
+    return sf.reindex(columns=positional.index)
+
+
 def predict_survival_at_time(fit: CoxModel, newdata: pd.DataFrame,
                              time: Optional[float] = None,
                              cfg: Optional[Config] = None) -> np.ndarray:
-    """Per-patient survival probability at ``time`` (default: the config horizon)."""
+    """Per-patient survival probability at ``time`` (default: the config horizon),
+    in the row order of ``newdata``."""
     model = _as_model(fit)
     if time is None:
         time = cfg.horizon if cfg is not None else 5
-    sf = model.fitter.predict_survival_function(newdata, times=[time])
+    sf = _survival_frame(model.fitter, newdata, [time])
     return sf.iloc[0].to_numpy()
 
 
@@ -128,7 +142,7 @@ def bootstrap_survival_ci(data: pd.DataFrame, cfg: Config,
             if model.strata:
                 kw["strata"] = model.strata
             cph.fit(sample[keep], **kw)
-            boot_preds[b] = cph.predict_survival_function(d, times=[time]).iloc[0].to_numpy()
+            boot_preds[b] = _survival_frame(cph, d, [time]).iloc[0].to_numpy()
         except Exception:
             continue
 
